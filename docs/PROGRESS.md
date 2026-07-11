@@ -43,8 +43,38 @@ suggests 1–2 outlier layers (likely layer 0) rather than smooth shared structu
 **Caveat:** weight-space only; activation-aware metrics + null comparison still pending,
 and GPT-2 is small/less-structured than modern LLMs.
 
-### Next
-- [ ] Read generator-model smoke test (dict/power/word vs baselines at matched budget).
-- [ ] Null-model comparison (does `shared`/`dict` gain survive spectrum-matched controls?).
-- [ ] Activation-aware re-scoring.
-- [ ] Scale to gpt2-medium (depth) and Pythia (family) if signal warrants.
+### Update (later in session 1) — the picture shifted
+
+- **Null controls**: shared/dict gain over independent low-rank is identical on real vs
+  spectrum-matched/rotated weights → weight-space "sharing" is a spectral artifact.
+- **Activation-aware** (builtin corpus, r=16): model ranking preserved (dict<word<shared<ind);
+  dict gives a real functional gain (attn.q act_err 0.79→0.53); words still lose to dict there.
+- **Fair word variant is the twist**: near-identity words are useless (0.627 > dict q3 0.575),
+  but **FREE-generator words beat dict q3 at matched 3-matrix budget (0.529 < 0.575, r=0,
+  attn.q)**. First positive signal → the earlier negative read was premature.
+- **Bug fixed**: single-generator power r=0 blew up because the trainable base diverged;
+  `powers.py` now fixes B at the mean (fair). Refit pending.
+
+### HANDOFF — to continue in another environment
+
+1. `pip install -r requirements.txt` (needs: numpy scipy scikit-learn torch transformers
+   safetensors huggingface_hub datasets pyyaml matplotlib). Note this box was **CPU-only**;
+   a CUDA box will make the torch word/power fits ~10-50x faster.
+2. Reproduce session 1:
+   ```
+   python scripts/01_extract_weights.py --model gpt2
+   python scripts/02_baselines.py       --model gpt2
+   python scripts/03_diagnostics.py     --model gpt2
+   python scripts/06_nulls.py           --model gpt2 --rank 8
+   python scripts/05_activations.py     --model gpt2      # builtin corpus, no network
+   python scripts/07_word_fairness.py   --model gpt2 --role attn.q
+   ```
+   (`data/`, `results/` are gitignored — regenerate locally.)
+3. **Session 2 priorities (in order):**
+   - [ ] Finish `07` for r=8 free-word + all 4 roles + 3 seeds (is the 0.046 win real?).
+   - [ ] Optimization-effort parity: give dict and word equal compute; try word L≤2 vs L≤3.
+   - [ ] Refit powers (B fixed) so its number is fair.
+   - [ ] Activation-space null for the dictionary (real structure vs spectral).
+   - [ ] Replicate free-word-vs-dict on **gpt2-medium** (depth) and **Pythia-160m** (family).
+   - [ ] If the free-word edge holds → measure downstream perplexity with reconstructed weights.
+- Source of truth: `docs/CONCLUSIONS.md` (Q-by-Q), `docs/results_summary.md` (numbers).

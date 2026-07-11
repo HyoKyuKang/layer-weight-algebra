@@ -68,14 +68,17 @@ def fit_power(
     torch.manual_seed(seed)
     k, d, _ = W.shape
     Wt = torch.tensor(W.astype(np.float64))
+    # Base is FIXED at the layerwise mean (a valid shared base). Jointly training B with a
+    # near-singular A destabilizes: A^a can blow up, dragging B far from the data so the
+    # error exceeds even ||W-mean|| (an unfair artifact, not a real failure of the orbit
+    # hypothesis). Fixing B guarantees error <= ||W - mean|| and gives the model its fair
+    # best. Only the shared generator A is optimized.
     B = Wt.mean(0).clone() if with_base else torch.zeros(d, d, dtype=torch.float64)
-    B.requires_grad_(with_base)
     # init A near identity (stable, invertible)
     A = (torch.eye(d, dtype=torch.float64)
          + 1e-2 * torch.randn(d, d, dtype=torch.float64)).requires_grad_(True)
 
-    params = [A] + ([B] if with_base else [])
-    opt = torch.optim.Adam(params, lr=lr)
+    opt = torch.optim.Adam([A], lr=lr)
 
     a_sel = np.zeros(k, dtype=int)
     alpha = np.ones(k)

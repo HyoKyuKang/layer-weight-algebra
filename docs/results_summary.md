@@ -34,20 +34,35 @@ Take-aways:
 - Layers are **nearly mutually orthogonal** (pairwise diff ≈ √2; no pair is close).
 - Commutator sits at the **generic random-matrix scale** — NOT evidence of commuting.
 
-## 3. Structured models (attn.q)
+## 3. Structured models — matched-budget test (attn.q)
+
+Budget axis = number of shared d² matrices stored. This is the project's decisive
+comparison. From `fairness_attn_q.json`:
 
 | model | shared d² mats | r=0 NFE | r=8 NFE |
 |-------|---------------:|--------:|--------:|
 | shared base | 1 | 0.917 | 0.823 |
 | dict q2 s2 | 2 | 0.676 | 0.606 |
-| dict q4 s2 | 4 | **0.480** | **0.433** |
-| single-generator power (+base) | 2 | **4.25 ✗** | 0.936 |
-| word (2-gen, L≤3, near-identity) | 3 | 0.668 | 0.606 |
+| dict q3 s2 | 3 | 0.575 | 0.516 |
+| dict q4 s2 | 4 | 0.480 | 0.433 |
+| dict q6 s2 | 6 | 0.331 | 0.298 |
+| word near-identity s2 | 3 | 0.627 | — |
+| **word FREE-generators s2** | **3** | **0.529** | *(pending)* |
+| single-generator power (+base) | 2 | (unstable, refit) | 0.936 |
 
-- **Power model fails outright** (r=0 NFE > 1 means it adds more error than signal).
-- Word model (3 stored matrices) only matches dict q2 (2 stored matrices); a matched-
-  budget dict q3 (≈0.58 interpolated) beats it → the word restriction buys nothing.
-  *(Fair, non-near-identity word variant: see fairness_attn_q.json.)*
+**Headline (revised):** the *near-identity* word constraint cripples the model (0.627,
+worse than dict q3=0.575), BUT with **free generators** the word model reaches **0.529 at
+3 matrices — beating dict q3 (0.575) at the identical budget.** So short noncommutative
+words over 2 free generators expose ~15 usable atoms from 3 stored matrices and give a
+small but real matched-budget edge over an unconstrained 3-atom dictionary (r=0, attn.q).
+This is the first positive signal and **overturns the earlier near-identity-based negative
+read**; it must now be confirmed across ranks (r=8 free-word pending), roles, seeds, and
+models before any claim.
+
+Caveats: single group / rank / seed; margin 0.046; word fit is non-convex torch vs dict's
+clean SVD (optimization-effort parity to check). The `power` r=0 value in the first run was
+a training blowup (trainable base diverged); powers.py now fixes B at the mean — refit
+pending.
 
 ## 4. Null-model controls (r=8, gain over independent LR)
 
@@ -69,11 +84,37 @@ the single strongest weight-space result and it applies even to the *dictionary*
 
 ## 5. Activation-aware (the decisive test)
 
-> The weight-space null result could still be overturned if real weights are aligned with
-> the actual activation subspace in a way random matrices are not. Filled in by
-> `scripts/05_activations.py` → `results/gpt2/activation_report.json`.
+Calibration: builtin 36-sentence corpus through gpt2, ~556 tokens/layer captured as the
+real input X to each weight. Metrics at **r=16**: `act_err = ‖(W−Ŵ)X‖²/‖WX‖²`,
+`cos` = mean output cosine. (`results/gpt2/activation_report.json`.)
 
-_(pending — see activation_report.json)_
+| role | model | weight NFE | act_err | out cosine |
+|------|-------|-----------:|--------:|-----------:|
+| attn.q | ind | 0.831 | 0.788 | 0.439 |
+| attn.q | shared | 0.759 | 0.729 | 0.508 |
+| attn.q | **dict q4s2** | 0.399 | **0.534** | **0.618** |
+| attn.q | word s2 | 0.524 | 0.631 | 0.577 |
+| attn.o | ind | 0.768 | 0.610 | 0.577 |
+| attn.o | shared | 0.703 | 0.691 | 0.533 |
+| attn.o | **dict q4s2** | 0.375 | **0.486** | **0.660** |
+| attn.o | word s2 | 0.530 | 0.658 | 0.565 |
+
+Findings:
+- **Model ranking is preserved through activations**: dict < word < shared < ind on
+  `act_err` (in 3/4 roles). The activation-aware test does **not** rescue generator words —
+  they still lose to the unconstrained dictionary functionally.
+- The dictionary yields a *genuine* functional gain (attn.q act_err 0.79→0.53, cos
+  0.44→0.62), but that is the known MASA/Basis-Sharing dictionary, not our word/power model.
+- **Inversion at attn.o**: shared/word have *higher* act_err than plain independent
+  low-rank (0.69/0.66 vs 0.61) — a shared component can hurt functionally there.
+- Interesting nuance: for the dictionary, `act_err > weight NFE` (errors sit in
+  activation-relevant directions), while for ind/shared `act_err < weight NFE` (errors
+  hide in unused directions).
+
+_Open refinement:_ an activation-space null (does dict's act_err gain survive spectrum-
+matched weights measured through the same X?) would fully separate "real functional
+structure" from "spectral artifact" for the dictionary. Words are already settled: they
+lose to dict in both spaces.
 
 ## Provisional conclusion (weight-space)
 
