@@ -62,7 +62,11 @@ def fit_words(
     W: np.ndarray, g: int = 2, max_len: int = 3, s: int = 2, r: int = 0,
     eps: float = 0.1, steps: int = 120, lr: float = 2e-2, reselect_every: int = 15,
     spec_penalty: float = 1e-3, seed: int = 0, include_identity: bool = False,
+    near_identity: bool = True,
 ) -> dict:
+    """near_identity=True -> G_j = I + eps H_j (stable, spec suggests this). False ->
+    free generators G_j (init random-orthogonal, kept near unit spectral norm) so the
+    word atoms can be genuinely diverse -- the *fair* test of the word restriction."""
     import torch
 
     torch.manual_seed(seed)
@@ -71,37 +75,50 @@ def fit_words(
     Wt = torch.tensor(W.astype(np.float64))
     words = enumerate_words(g, max_len, include_identity)
     n_words = len(words)
-
-    B = Wt.mean(0).clone().requires_grad_(True)
-    # generators near identity: G_j = I + eps H_j
-    H = [(1e-2 * torch.randn(d, d, dtype=torch.float64)).requires_grad_(True)
-         for _ in range(g)]
     eye = torch.eye(d, dtype=torch.float64)
 
-    opt = torch.optim.Adam([B] + H, lr=lr)
+    B = Wt.mean(0).clone().requires_grad_(True)
+    if near_identity:
+        H = [(1e-2 * torch.randn(d, d, dtype=torch.float64)).requires_grad_(True)
+             for _ in range(g)]
+        make_G = lambda: [eye + eps * Hj for Hj in H]
+        gen_params = H
+    else:
+        # init generators as random orthogonal (bounded products), optimize directly
+        raw = []
+        for _ in range(g):
+            Q, _ = torch.linalg.qr(torch.randn(d, d, dtype=torch.float64))
+            raw.append(Q.clone().requires_grad_(True))
+        make_G = lambda: list(raw)
+        gen_params = raw
+
+    opt = torch.optim.Adam([B] + gen_params, lr=lr)
 
     codes = np.zeros((k, n_words))
     for step in range(steps):
-        Gs = [eye + eps * Hj for Hj in H]
         if step % reselect_every == 0:
             with torch.no_grad():
-                atoms = _atoms_from_generators(Gs, words)
+                atoms = _atoms_from_generators(make_G(), words)
                 atom_mat = torch.stack([a.reshape(P) for a in atoms], dim=1).numpy()  # (P,W)
                 target = (Wt - B).reshape(k, P).numpy()
                 codes = _omp_codes(target, atom_mat, s)
         opt.zero_grad()
-        Gs = [eye + eps * Hj for Hj in H]
+        Gs = make_G()
         atoms = _atoms_from_generators(Gs, words)
         atom_stack = torch.stack([a.reshape(P) for a in atoms], dim=0)  # (W,P)
         recon = B.reshape(P)[None] + torch.tensor(codes) @ atom_stack     # (k,P)
         loss = ((Wt.reshape(k, P) - recon) ** 2).sum()
-        for Hj in H:
-            loss = loss + spec_penalty * (eps * Hj).pow(2).sum()
+        if near_identity:
+            for Hj in H:
+                loss = loss + spec_penalty * (eps * Hj).pow(2).sum()
+        else:
+            for Gj in Gs:  # keep spectral norm near 1 so words neither blow up nor vanish
+                loss = loss + spec_penalty * (torch.linalg.matrix_norm(Gj, 2) - 1.0) ** 2
         loss.backward()
         opt.step()
 
     with torch.no_grad():
-        Gs = [eye + eps * Hj for Hj in H]
+        Gs = make_G()
         atoms = _atoms_from_generators(Gs, words)
         atom_mat = torch.stack([a.reshape(P) for a in atoms], dim=1).numpy()
         Bn = B.numpy()
@@ -113,6 +130,7 @@ def fit_words(
             comp = Bn + recon_flat[i].reshape(d, d)
             R = linalg.best_rank_r(W[i].astype(np.float64) - comp, r)
             What[i] = comp + R
+        gen_np = [Gj.detach().numpy() for Gj in Gs]
 
     shared = d * d + g * d * d            # B + g generators
     per_layer = s + lowrank_params(r, d)  # s coefficients (+ word indices, few bits)
@@ -121,7 +139,6 @@ def fit_words(
     return {
         "name": "word", "What": What.astype(W.dtype), "cost": cost,
         "g": g, "max_len": max_len, "s": s, "r": r, "n_words": n_words,
-        "index_bits": index_bits,
-        "generators": [ (eye + eps * Hj).detach().numpy() for Hj in H ],
-        "B": Bn, "codes": codes,
+        "index_bits": index_bits, "near_identity": near_identity,
+        "generators": gen_np, "B": Bn, "codes": codes,
     }

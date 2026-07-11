@@ -47,13 +47,25 @@ the generator-word model must beat an **unconstrained dictionary at matched bits
 **survive activation-aware evaluation**. Otherwise the honest result is "arbitrary
 dictionaries work, generator words do not" — which our pipeline is built to detect.
 
-## To deepen (v2)
+## Degenerate / boundary cases of our family
+
+| Work | Where it sits in our parameterization |
+|------|----------------------------------------|
+| **ALBERT** (Lan et al. 2020) | hard weight-tying: $W_\ell = B$ for all $\ell$ (our `mean` with the base *trained*, no residual, no words). Works when trained from scratch; says nothing about post-hoc structure of *independently* trained layers. |
+| **Universal Transformer** (Dehghani et al. 2019) | one shared block applied recurrently = full tying across depth; the $g{=}0$, $r{=}0$ corner. |
+| **Head-wise Shareable Attention** (2402.11819) | shares whole attention *heads* across layers — coarser than atom/word sharing. |
+| **Hypernetworks** (Ha et al. 2016; HyperLoader 2407.01411) | $W_\ell = f_\theta(\ell)$ for a small net $f$ — a *nonlinear* shared code, strictly more general than our linear words; relevant as an upper-bound competitor for "layers are a low-dim function of depth." |
+
+Note ALBERT/UT show tying *works when you train for it*. Our question is the opposite
+direction: does structure survive in weights trained **without** any sharing constraint?
+The two are not in tension — a negative post-hoc result is fully consistent with ALBERT.
+
+## To deepen (v2+)
 
 - [ ] Exact MASA atom count / budget and whether it reports same-role vs all-role sharing.
-- [ ] Hypernetworks / weight-generation nets (are layer weights outputs of a small net?).
 - [ ] Monoid/semigroup-generated matrix families in applied math (outside ML).
-- [ ] Weight-tying classics (ALBERT, Universal Transformer) as the degenerate g=0 case.
 - [ ] Whether any work reports **negative** cross-layer sharing for attention specifically.
+- [ ] Recurrent-depth / LoopFormer (2602.11451) as a trained-in structural prior.
 
 ## Sources
 
@@ -63,3 +75,7 @@ dictionaries work, generator words do not" — which our pipeline is built to de
 - MASA / Share Your Attention — https://arxiv.org/abs/2508.04581
 - FiPS / Learning Parameter Sharing w/ Tensor Decomp. & Sparsity — https://arxiv.org/abs/2411.09816
 - Tensor-network compression pipeline — https://arxiv.org/pdf/2602.01613
+- ALBERT — https://huggingface.co/docs/transformers/en/model_doc/albert
+- Universal Transformer — https://arxiv.org/abs/1807.03819
+- Head-wise Shareable Attention — https://arxiv.org/pdf/2402.11819
+- Hypernetworks (HyperLoader) — https://arxiv.org/abs/2407.01411

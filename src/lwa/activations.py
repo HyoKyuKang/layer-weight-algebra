@@ -70,8 +70,20 @@ def collect_activations(
             h = find_layer_module(i, suffix).register_forward_hook(make_hook(i, suffix))
             handles.append(h)
 
-    # calibration corpus
-    ds = load_dataset(dataset, dataset_config, split="train")
+    # calibration corpus (datasets>=5 needs canonical namespace/name repo ids)
+    candidates = [dataset]
+    if "/" not in dataset:
+        candidates += [f"Salesforce/{dataset}", f"mirror/{dataset}"]
+    ds = None
+    last_err = None
+    for cand in candidates:
+        try:
+            ds = load_dataset(cand, dataset_config, split="train")
+            break
+        except Exception as e:  # noqa: BLE001 - try the next mirror
+            last_err = e
+    if ds is None:
+        raise RuntimeError(f"could not load calibration dataset {dataset!r}: {last_err}")
     rng = np.random.default_rng(seed)
     texts = [t for t in ds["text"] if t and len(t) > 64]
     idx = rng.choice(len(texts), size=min(n_samples, len(texts)), replace=False)
