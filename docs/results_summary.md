@@ -47,17 +47,17 @@ comparison. From `fairness_attn_q.json`:
 | dict q4 s2 | 4 | 0.480 | 0.433 |
 | dict q6 s2 | 6 | 0.331 | 0.298 |
 | word near-identity s2 | 3 | 0.627 | — |
-| **word FREE-generators s2** | **3** | **0.529** | *(pending)* |
+| **word FREE-generators s2** | **3** | **0.529** | **0.493** |
 | single-generator power (+base) | 2 | (unstable, refit) | 0.936 |
 
 **Headline (revised):** the *near-identity* word constraint cripples the model (0.627,
-worse than dict q3=0.575), BUT with **free generators** the word model reaches **0.529 at
-3 matrices — beating dict q3 (0.575) at the identical budget.** So short noncommutative
-words over 2 free generators expose ~15 usable atoms from 3 stored matrices and give a
-small but real matched-budget edge over an unconstrained 3-atom dictionary (r=0, attn.q).
-This is the first positive signal and **overturns the earlier near-identity-based negative
-read**; it must now be confirmed across ranks (r=8 free-word pending), roles, seeds, and
-models before any claim.
+worse than dict q3=0.575), BUT with **free generators** the word model beats the
+matched-budget dict q3 at **both** ranks — **r=0: 0.529 < 0.575** and **r=8: 0.493 <
+0.516** (3 stored matrices each). Short noncommutative words over 2 free generators expose
+~15 usable atoms from 3 stored matrices, a small but *consistent* matched-budget edge over
+an unconstrained 3-atom dictionary (attn.q). This is the first positive signal and
+**overturns the earlier near-identity-based negative read**; still one group/seed and
+dict q4 (4 mats) wins overall, so confirm across roles, seeds, and models before any claim.
 
 Caveats: single group / rank / seed; margin 0.046; word fit is non-convex torch vs dict's
 clean SVD (optimization-effort parity to check). The `power` r=0 value in the first run was
