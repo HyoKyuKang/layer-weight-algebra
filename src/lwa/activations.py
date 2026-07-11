@@ -27,15 +27,63 @@ _GPT2_ROLE_MODULE = {
 }
 
 
+# Network-free fallback calibration corpus (varied registers -> varied activations).
+# Enough real text to estimate the input covariance each weight actually sees.
+BUILTIN_CALIBRATION = [
+    "The transformer architecture relies on stacked layers of self-attention and feed-forward blocks.",
+    "In the morning the market filled with vendors selling fruit, bread, and cheap electronics.",
+    "She argued that the proof was incomplete because the base case had never been established.",
+    "Quantum computers exploit superposition and entanglement to explore many states at once.",
+    "He opened the letter slowly, dreading whatever news it might finally contain.",
+    "The recipe calls for two cups of flour, a pinch of salt, and three ripe bananas.",
+    "Economic growth slowed sharply in the third quarter as consumer spending contracted.",
+    "The river carved the canyon over millions of years, layer by patient layer.",
+    "To install the package, run the command and then restart your development server.",
+    "Democracy depends on the peaceful transfer of power and an informed electorate.",
+    "The cat knocked the glass off the table and watched it shatter with mild interest.",
+    "Neural networks approximate functions by composing many simple nonlinear transformations.",
+    "After the storm the beach was littered with driftwood, seaweed, and broken shells.",
+    "The committee will reconvene next Tuesday to finalize the annual budget proposal.",
+    "Photosynthesis converts sunlight, water, and carbon dioxide into glucose and oxygen.",
+    "His voice trembled slightly as he read the names of those who had not returned.",
+    "The algorithm sorts the array in place using a divide-and-conquer strategy.",
+    "Rising sea levels threaten coastal cities from Jakarta to Miami to Venice.",
+    "They danced until the band packed up and the last streetlights flickered off.",
+    "A balanced diet includes proteins, complex carbohydrates, healthy fats, and fiber.",
+    "The senator declined to comment on the ongoing investigation into campaign finances.",
+    "Gravity bends spacetime, and light follows the curvature it cannot escape.",
+    "The children built an elaborate sandcastle only to abandon it at the first ice-cream call.",
+    "Compilers translate high-level source code into efficient machine instructions.",
+    "The novel opens in a rain-soaked city where nothing is quite what it seems.",
+    "Vaccines train the immune system to recognize pathogens before an infection spreads.",
+    "Interest rates were held steady, but the central bank signaled caution ahead.",
+    "The mountain trail narrowed until they were walking single file along the ridge.",
+    "Machine translation has improved dramatically with large multilingual language models.",
+    "She planted tomatoes, basil, and marigolds along the sunny edge of the garden.",
+    "The verdict surprised no one, yet the courtroom fell completely silent.",
+    "Distributed systems must tolerate partial failure without corrupting shared state.",
+    "Autumn leaves drifted across the empty playground in slow, unhurried spirals.",
+    "The startup pivoted three times before finding a product the market actually wanted.",
+    "Careful measurement revealed a tiny but persistent discrepancy in the results.",
+    "Grandmother's stories always began the same way and never ended where you expected.",
+]
+
+
 def collect_activations(
     model_id: str, roles: list[str], cache_dir: str | None = None,
-    dataset: str = "wikitext", dataset_config: str = "wikitext-2-raw-v1",
+    dataset: str | None = None, dataset_config: str = "wikitext-2-raw-v1",
     n_samples: int = 64, seq_len: int = 256, n_tokens: int = 4096, seed: int = 0,
+    texts: list[str] | None = None,
 ) -> dict[str, np.ndarray]:
-    """Return {role: X (k, d, N)} of calibration inputs per layer (subsampled tokens)."""
+    """Return {role: X (k, d, N)} of calibration inputs per layer (subsampled tokens).
+
+    Calibration text source, in order of preference:
+      * ``texts`` if given;
+      * the HF ``dataset`` if given (needs network / cached files);
+      * the network-free ``BUILTIN_CALIBRATION`` corpus (default).
+    """
     import torch
     from transformers import AutoModelForCausalLM, AutoTokenizer
-    from datasets import load_dataset
 
     tok = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)
     model = AutoModelForCausalLM.from_pretrained(
@@ -70,22 +118,22 @@ def collect_activations(
             h = find_layer_module(i, suffix).register_forward_hook(make_hook(i, suffix))
             handles.append(h)
 
-    # calibration corpus (datasets>=5 needs canonical namespace/name repo ids)
-    candidates = [dataset]
-    if "/" not in dataset:
-        candidates += [f"Salesforce/{dataset}", f"mirror/{dataset}"]
-    ds = None
-    last_err = None
-    for cand in candidates:
-        try:
-            ds = load_dataset(cand, dataset_config, split="train")
-            break
-        except Exception as e:  # noqa: BLE001 - try the next mirror
-            last_err = e
-    if ds is None:
-        raise RuntimeError(f"could not load calibration dataset {dataset!r}: {last_err}")
+    # resolve calibration text source
     rng = np.random.default_rng(seed)
-    texts = [t for t in ds["text"] if t and len(t) > 64]
+    if texts is None and dataset:
+        from datasets import load_dataset  # noqa: PLC0415
+        candidates = [dataset] + ([f"Salesforce/{dataset}"] if "/" not in dataset else [])
+        ds = None
+        for cand in candidates:
+            try:
+                ds = load_dataset(cand, dataset_config, split="train")
+                break
+            except Exception:  # noqa: BLE001 - fall through to builtin corpus
+                ds = None
+        if ds is not None:
+            texts = [t for t in ds["text"] if t and len(t) > 64]
+    if not texts:
+        texts = list(BUILTIN_CALIBRATION)
     idx = rng.choice(len(texts), size=min(n_samples, len(texts)), replace=False)
 
     with torch.no_grad():

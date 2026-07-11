@@ -37,12 +37,17 @@ def main() -> None:
 
     acts = activations.load_activations(act_dir, roles)
     if set(acts) != set(roles):
-        print("[act] collecting calibration activations ...")
+        print("[act] collecting calibration activations ...", flush=True)
+        # default: network-free builtin corpus. Set activation.use_dataset: true to pull
+        # the HF dataset instead (needs network / cached files).
+        use_ds = acfg.get("use_dataset", False)
         acts = activations.collect_activations(
             model, roles, cache_dir=cache_dir,
-            dataset=acfg["dataset"], dataset_config=acfg["dataset_config"],
+            dataset=(acfg["dataset"] if use_ds else None),
+            dataset_config=acfg["dataset_config"],
             n_samples=acfg["n_samples"], seq_len=acfg["seq_len"])
         activations.save_activations(acts, act_dir)
+        print(f"[act] captured activations for {len(acts)} roles", flush=True)
 
     r = max([x for x in cfg["ranks"] if x <= 16], default=cfg["ranks"][0])
     report = {}

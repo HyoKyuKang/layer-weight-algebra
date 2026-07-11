@@ -41,7 +41,8 @@ word:
 # ---- Activation-aware metrics ----------------------------------------------
 activation:
   enabled: true
-  dataset: Salesforce/wikitext   # calibration corpus (canonical HF repo id)
+  use_dataset: false             # false -> network-free builtin corpus (default)
+  dataset: Salesforce/wikitext   # used only if use_dataset: true
   dataset_config: wikitext-2-raw-v1
   n_samples: 64
   seq_len: 256
