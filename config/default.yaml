@@ -1,0 +1,53 @@
+# Default experiment configuration for Layer Weight Algebra.
+# Override on the CLI, e.g.  --model gpt2  --set ranks=[0,4,8,16]
+
+seed: 0
+
+# ---- Model / weight extraction ----------------------------------------------
+model: gpt2                 # HF model id: gpt2, gpt2-medium, EleutherAI/pythia-160m, ...
+dtype: float32             # weights cast to this for analysis
+cache_dir: hf_cache        # HF download cache (gitignored)
+data_dir: data             # extracted weights written here
+results_dir: results       # metrics + figures written here
+
+# Which same-role square weight groups to extract. Roles are model-family specific;
+# see src/lwa/extract.py::ROLE_SPECS. Empty -> all square same-shape roles found.
+roles: []                  # e.g. [attn.q, attn.k, attn.v, attn.o]
+include_first_last: true   # keep layer 0 and final layer in each group
+
+# ---- Shared sweep grid ------------------------------------------------------
+ranks: [0, 4, 8, 16, 32]   # residual ranks r
+
+# ---- Dictionary model -------------------------------------------------------
+dict:
+  q: [1, 2, 4, 8]          # number of shared dictionary atoms
+  s: [1, 2]                # max nonzero coefficients per layer
+  init: svd                # svd | ksvd | random
+
+# ---- Power model ------------------------------------------------------------
+power:
+  max_exp: 6               # exponent range a_l in [-max_exp .. max_exp] (neg via inverse)
+  with_base: true          # also fit B + alpha_l * A^a_l + R_l
+
+# ---- Word model -------------------------------------------------------------
+word:
+  g: 2                     # number of generators
+  max_len: 3               # max word length L
+  s: [1, 2]                # words per layer
+  near_identity: true      # parameterize G_j = I + eps * H_j
+  search: beam             # exhaustive | beam
+  beam_width: 8
+
+# ---- Activation-aware metrics ----------------------------------------------
+activation:
+  enabled: true
+  dataset: wikitext        # calibration corpus
+  dataset_config: wikitext-2-raw-v1
+  n_samples: 64
+  seq_len: 256
+
+# ---- Optimization -----------------------------------------------------------
+optim:
+  steps: 200
+  lr: 0.01
+  tol: 1.0e-6

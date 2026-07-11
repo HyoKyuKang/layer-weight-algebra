@@ -1,0 +1,32 @@
+# Data & experiment outputs (large / reproducible)
+data/
+results/
+!results/.gitkeep
+*.npz
+*.npy
+*.pt
+*.safetensors
+
+# HuggingFace / model caches
+.cache/
+hf_cache/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

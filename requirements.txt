@@ -1,0 +1,19 @@
+# Core numerics
+numpy
+scipy
+scikit-learn
+
+# Deep learning / model loading
+torch
+transformers
+safetensors
+huggingface_hub
+datasets
+accelerate
+
+# Config & plotting
+pyyaml
+matplotlib
+
+# Optional: progress bars
+tqdm
